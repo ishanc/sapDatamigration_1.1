@@ -1,0 +1,18 @@
+﻿SourceTable,SourceField,SourceFieldDescription,SourceType,SourceLength,MappingRule,RDFPredicate
+customer,customercode,auto generated customer code,char,8,source_field = Target_Field,ex:hasCustomerID
+customer,customername 1,name 1,char,50,source_field = Target_Field,foaf:firstName
+customer,customername 2,name 2,char,50,source_field = Target_Field,foaf:firstName
+customer,street_address,street address,char,45,source_field = Target_Field,ex:hasStreetAddress
+customer,postal code,zip code,char,10,source_field = Target_Field,ex:hasPostalCode
+customer,state,state,char,15,source_field = Target_Field,ex:hasState
+customer,city,city,char,30,source_field = Target_Field,ex:hasCity
+customer,telephone,telephone,char,16,source_field = Target_Field,ex:hasTelephone
+customerfinance,accountcode,accountcode,char,5,source_field = Target_Field,ex:hasAccountcode
+customerfinance,tax ID,tax ID,char,6,format: XX-XXXXXXX,ex:hasTaxID
+customerfinance,tax jurisdiction,tax jurisdiction,char,10,source_field = Target_Field,ex:hasTaxJurisdiction
+customerfinance,accountblock,customer block,char,5,source_field = Target_Field,ex:hasAccountblock
+customerfinance,payterms,payment terms,char,5,source_field = Target_Field,ex:hasPayterms
+customerbank,bankcountry,bank location,char,3,source_field = Target_Field,ex:hasBankcountry
+customerbank,banknumber,bank number,char,10,source_field = Target_Field,ex:hasBanknumber
+customerbank,accountnumber,acoount number,char,18,source_field = Target_Field,ex:hasAccountnumber
+customerbank,controlkey,control key,char,2,source_field = Target_Field,ex:hasControlkey

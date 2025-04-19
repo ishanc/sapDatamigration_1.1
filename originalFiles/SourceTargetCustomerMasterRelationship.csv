@@ -1,0 +1,15 @@
+﻿SourceField,TargetField,MappingRule
+customercode,kunnr,direct
+name,name1,direct
+address,stras,direct
+city,ort01,direct
+state,regio,direct
+country,land1,direct
+payment terms,zterm,direct
+taxid,stcd1,direct
+credit_limit,klimk,direct
+credit rating,kdgrp,direct
+type,ktokd,direct
+sale org,vkorg,direct
+channel,vtweg,direct
+division,spart,direct

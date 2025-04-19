@@ -1,0 +1,23 @@
+﻿TargetLabel,TargetField,TargetFieldDescription,TargetKey,TargetType,TargetLength,MappingRule,RDFPredicate
+General_data,mandt,client,key,char,3,200,
+General_data,kunnr,customer number,key,char,10,source_field = Target_Field,ex:hasCustomerID
+General_data,name1,customer name 1,,char,35,source_field = Target_Field,foaf:firstName
+General_data,name2,customer name 2,,char,35,source_field = Target_Field,foaf:firstName
+General_data,ort01,street_address,,char,35,source_field = Target_Field,ex:hasStreetAddress
+General_data,pstlz,postal code,,char,10,source_field = Target_Field,ex:hasPostalCode
+General_data,regio,state,,char,15,source_field = Target_Field,ex:hasState
+General_data,sortl,sort key,,char,10,source_field = Target_Field,ex:hasIndex
+General_data,stras,city,,char,35,source_field = Target_Field,ex:hasCity
+General_data,telf1,telephone,,char,16,source_field = Target_Field,ex:hasTelephone
+General_data,ktokd,Customer Account Group,,char,4,source_field = Target_Field,ex:hasAccountcode
+Finance_view,stcd1,tax number,,char,16,source_field = Target_Field,ex:hasTaxID
+Finance_view,txjcd,tax jurisdition,,char,15,source_field = Target_Field,ex:hasTaxJurisdiction
+Finance_view,bukrs,company code,,char,4,100,
+Finance_view,sperr,posting block,,char,1,source_field = Target_Field,ex:hasAccountblock
+Bank_view,zterm,Terms of payment key,,char,4,"If pay_terms contains 30, then T030
+If it contains 15 then, T015,
+Else T001",ex:hasPayterms
+Bank_view,banks,bank country key,key,char,3,source_field = Target_Field,ex:hasBankcountry
+Bank_view,bankl,bank keys,key,char,15,source_field = Target_Field,ex:hasBanknumber
+Bank_view,bankn,bank account number,key,char,18,source_field = Target_Field,ex:hasAccountnumber
+Bank_view,bkont,bank control key,,char,2,source_field = Target_Field,ex:hasControlkey
