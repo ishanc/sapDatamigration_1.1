@@ -2,7 +2,8 @@ import os
 import csv
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
+import pandas as pd
+from config import CONFIG
 
 # Load environment variables
 load_dotenv()
@@ -11,46 +12,6 @@ NEO4J_URI = os.getenv("NEO4J_URI")
 NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
-
-# Initialize Hugging Face client with the provided token
-client = InferenceClient(
-    provider="hf-inference",
-    token="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"
-)
-
-def query_llm(prompt):
-    """
-    Query the Hugging Face LLM with a given prompt using streaming.
-    :param prompt: The user input to send to the LLM.
-    :return: The LLM's response as a string.
-    """
-    try:
-        messages = [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-
-        stream = client.chat.completions.create(
-            model="mistralai/Mistral-Nemo-Instruct-2407",
-            messages=messages,
-            max_tokens=500,
-            stream=True
-        )
-
-        response = ""
-        for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                response += content
-                print(content, end="")  # Print the streaming output
-        
-        return response
-
-    except Exception as e:
-        print(f"Error querying LLM: {e}")
-        return "An error occurred while querying the LLM."
 
 class Neo4jHandler:
     def __init__(self, uri, user, password):
@@ -68,21 +29,30 @@ class Neo4jHandler:
         with self.driver.session(database=NEO4J_DATABASE) as session:
             result = session.run(query)
             return [record for record in result]
-            
+
+    def fetch_column_standardization_rules(self):
+        query = """
+        MATCH (cs:ColumnStandardization {name: 'field_standardization'})
+        RETURN cs.rules as rules
+        """
+        with self.driver.session(database=NEO4J_DATABASE) as session:
+            result = session.run(query)
+            record = result.single()
+            if record and record["rules"]:
+                import json
+                return json.loads(record["rules"])
+            return []
+
     def apply_transformation(self, value, rule, transform_query=None):
-        """Execute a transformation rule in Neo4j"""
         if rule == "direct" or not rule:
             return value
             
         if rule == "transform" and transform_query:
-            # Clean up the transform query by removing extra whitespace
             transform_query = transform_query.strip()
-            
             query = f"""
             WITH $value AS text
             RETURN {transform_query} AS result
             """
-                
             with self.driver.session(database=NEO4J_DATABASE) as session:
                 try:
                     result = session.run(query, value=value)
@@ -91,117 +61,201 @@ class Neo4jHandler:
                 except Exception as e:
                     print(f"Error applying transformation: {str(e)}")
                     return value
-                    
         return value
 
-# Initialize Neo4j handler
-neo4j_handler = Neo4jHandler(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    def fetch_column_order(self):
+        query = """
+        MATCH (c:ColumnOrder {name: "default"})
+        RETURN c.order AS column_order
+        """
+        with self.driver.session(database=NEO4J_DATABASE) as session:
+            result = session.run(query)
+            record = result.single()
+            return record["column_order"] if record else []
 
-# Fetch transformation rules
-transformation_rules = neo4j_handler.fetch_transformation_rules()
+def get_source_target_mappings(mapping_file):
+    """Read source-target mappings from mapping file"""
+    mappings = {}
+    with open(mapping_file, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            mappings[row['SourceField']] = {
+                'target': row['TargetField'],
+                'rule': row['MappingRule']
+            }
+    return mappings
 
-# Close Neo4j connection
-neo4j_handler.close()
-
-# Apply transformation logic to source files
-def transform_data(source_files, transformation_rules, output_file):
-    # Dictionary to store consolidated data by customer code/index
-    consolidated_data = {}
+def process_dataframes(config):
+    """Process and merge dataframes based on dynamic configuration"""
+    dataframes = {}
+    source_mappings = get_source_target_mappings(config['mapping_file'])
+    source_fields = list(source_mappings.keys())
     
-    # Create Neo4j handler for transformations
+    # Initialize Neo4j handler
     neo4j_handler = Neo4jHandler(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
     
-    # Create Neo4j mappings dictionary with rules
-    neo4j_mappings = {rule['source_field']: {'target': rule['target_field'], 'rule': rule['mapping_rule'], 'transform_query': rule.get('transform_query')} 
-                     for rule in transformation_rules}
-    
-    # Process each source file
-    for source_file in source_files:
-        try:
-            print(f"\nProcessing file: {source_file}")
-            with open(source_file, mode='r', encoding='utf-8-sig') as file:
-                reader = csv.DictReader(file)
-                fieldnames = [name.strip() for name in reader.fieldnames]
-                print(f"Fields found: {fieldnames}")
-                
-                for row_num, row in enumerate(reader, 1):
-                    clean_row = {k.strip(): v.strip() if v else "" for k, v in row.items()}
-                    key = (clean_row.get('customercode', '') or clean_row.get('index', ''))
-                    
-                    if key:
-                        if key not in consolidated_data:
-                            consolidated_data[key] = {}
-                        
-                        # Store values directly with their source field names
-                        for csv_field, value in clean_row.items():
-                            if value:
-                                consolidated_data[key][csv_field.strip()] = value
-                                print(f"Stored value for {csv_field}: {value}")
-                    else:
-                        print(f"Warning: No valid key found for row {row_num}")
-
-        except Exception as e:
-            print(f"Error processing file {source_file}: {str(e)}")
-            continue
-
-    # Transform consolidated data using Neo4j mappings
-    transformed_data = []
-    print(f"\nNumber of records consolidated: {len(consolidated_data)}")
-    
-    for key, data in consolidated_data.items():
-        transformed_row = {}
-        # Apply Neo4j mappings to get final target fields
-        for source_field, value in data.items():
-            if source_field in neo4j_mappings:
-                mapping = neo4j_mappings[source_field]
-                target_field = mapping['target']
-                transformed_row[target_field] = neo4j_handler.apply_transformation(value, mapping['rule'], mapping.get('transform_query'))
-                print(f"Mapped {source_field} -> {target_field}: {value} -> {transformed_row[target_field]}")
-        
-        if transformed_row:
-            transformed_data.append(transformed_row)
-
-    # Close Neo4j connection
-    neo4j_handler.close()
-
-    # Write transformed data to output file
     try:
-        with open(output_file, mode='w', newline='', encoding='utf-8') as file:
-            if transformed_data:
-                fieldnames = set()
-                for row in transformed_data:
-                    fieldnames.update(row.keys())
+        # Get standardization rules from Neo4j
+        standardization_rules = neo4j_handler.fetch_column_standardization_rules()
+        
+        # Load each dataframe
+        for key, file_config in config['files_config'].items():
+            df = pd.read_csv(file_config['path'])
+            
+            # Clean column names - strip whitespace
+            df.columns = df.columns.str.strip()
+            
+            # First standardize the key field if needed
+            if file_config['key_field'] == 'index':
+                df = df.rename(columns={'index': 'customercode'})
+            
+            # Apply other standardization rules
+            for rule in standardization_rules:
+                if rule['source_field'] in df.columns and rule['source_field'] != 'index':
+                    # Check if condition exists and is satisfied
+                    if rule['condition'] is None:
+                        df = df.rename(columns={rule['source_field']: rule['target_field']})
+                    else:
+                        # Create a safe evaluation context
+                        eval_context = {'key_field': file_config['key_field']}
+                        try:
+                            if eval(rule['condition'], {"__builtins__": {}}, eval_context):
+                                df = df.rename(columns={rule['source_field']: rule['target_field']})
+                        except Exception as e:
+                            print(f"Warning: Failed to evaluate condition '{rule['condition']}': {str(e)}")
                 
-                writer = csv.DictWriter(file, fieldnames=sorted(list(fieldnames)))
-                writer.writeheader()
-                writer.writerows(transformed_data)
-                print(f"\nSuccessfully wrote {len(transformed_data)} records to {output_file}")
-                print(f"Fields written: {sorted(list(fieldnames))}")
+            # Keep only mapped source fields plus the key field
+            keep_columns = [col for col in df.columns if col in ['customercode'] + source_fields]
+            df = df[keep_columns]
+                
+            # Keep original dataframe
+            dataframes[key] = df
+    finally:
+        neo4j_handler.close()
+
+    # First merge all non-finance files
+    base_files = [k for k in config['merge_order'] if k in dataframes and 'finance' not in k]
+    if base_files:
+        result_df = dataframes[base_files[0]]
+        for key in base_files[1:]:
+            if key in dataframes:
+                result_df = pd.merge(
+                    result_df,
+                    dataframes[key],
+                    on='customercode',
+                    how='outer'
+                )
+    else:
+        result_df = pd.DataFrame()
+
+    # Handle finance data files separately
+    finance_files = sorted([k for k in dataframes.keys() if 'finance' in k])
+    if finance_files:
+        # Start with empty finance dataframe
+        finance_df = pd.DataFrame()
+        
+        # Process each finance file in order (copy file last)
+        for file_key in finance_files:
+            df = dataframes[file_key]
+            if finance_df.empty:
+                finance_df = df
             else:
-                print("No data to write to output file")
-    except Exception as e:
-        print(f"Error writing to output file {output_file}: {str(e)}")
+                # For each customer in the new file
+                for idx, row in df.iterrows():
+                    cust_code = row['customercode']
+                    # Update existing or append new
+                    if cust_code in finance_df['customercode'].values:
+                        mask = finance_df['customercode'] == cust_code
+                        # Update non-null values
+                        for col in df.columns:
+                            if col != 'customercode' and pd.notna(row[col]):
+                                finance_df.loc[mask, col] = row[col]
+                    else:
+                        finance_df = pd.concat([finance_df, pd.DataFrame([row])], ignore_index=True)
 
-# Define source files and output file
-source_files = [
-    os.path.join("originalFiles", "customer address.csv"),
-    os.path.join("originalFiles", "customer finances.csv"),
-    os.path.join("originalFiles", "customer type.csv")
-]
-output_file = "transformed_output.csv"
+        # Merge finance data with base data
+        if not result_df.empty:
+            result_df = pd.merge(
+                result_df,
+                finance_df,
+                on='customercode',
+                how='outer',
+                suffixes=('', '_finance')
+            )
+            
+            # Clean up duplicate columns while preserving all values
+            for col in result_df.columns:
+                if col.endswith('_finance'):
+                    base_col = col.replace('_finance', '')
+                    if base_col in result_df.columns:
+                        # For payment terms, prefer finance values
+                        if base_col == 'payment terms':
+                            mask = result_df[col].notna()
+                            result_df.loc[mask, base_col] = result_df.loc[mask, col]
+                        else:
+                            # For other columns, only fill nulls
+                            result_df[base_col] = result_df[base_col].fillna(result_df[col])
+                    else:
+                        result_df[base_col] = result_df[col]
+                    result_df = result_df.drop(columns=[col])
+        else:
+            result_df = finance_df
 
-# Transform data
-transform_data(source_files, transformation_rules, output_file)
+    return result_df
 
-print(f"Transformation complete. Output written to {output_file}.")
+def main():
+    # Get source-target mappings
+    mappings = get_source_target_mappings(CONFIG['mapping_file'])
+    
+    # Process dataframes
+    merged_df = process_dataframes(CONFIG)
 
-# Example usage of LLM for resolving mismatches
-mismatch_example = "The source field 'customername 1' does not match the target field 'name1'."
-response = query_llm(mismatch_example)
-print(f"LLM Suggestion: {response}")
+    # Initialize Neo4j handler
+    neo4j_handler = Neo4jHandler(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    
+    try:
+        # Get transformation rules
+        transformation_rules = neo4j_handler.fetch_transformation_rules()
+        field_mappings = {rule['source_field']: rule for rule in transformation_rules}
 
-# Example usage
+        # Create output dataframe
+        output_df = pd.DataFrame()
+        
+        # Process each mapping
+        for source_field, mapping in mappings.items():
+            target_field = mapping['target']
+            if source_field in merged_df.columns:
+                print(f"\nProcessing {source_field} -> {target_field}")
+                
+                if source_field in field_mappings:
+                    rule = field_mappings[source_field]
+                    if rule['mapping_rule'] == 'direct':
+                        output_df[target_field] = merged_df[source_field].fillna('')
+                    elif rule['mapping_rule'] == 'transform':
+                        output_df[target_field] = merged_df[source_field].apply(
+                            lambda x: neo4j_handler.apply_transformation(
+                                x, 
+                                rule['mapping_rule'], 
+                                rule.get('transform_query')
+                            ) if pd.notna(x) else ''
+                        )
+                else:
+                    output_df[target_field] = merged_df[source_field].fillna('')
+
+        # Get and apply column order
+        column_order = neo4j_handler.fetch_column_order()
+        if column_order:
+            ordered_columns = [col for col in column_order if col in output_df.columns]
+            output_df = output_df[ordered_columns]
+
+        # Save output
+        output_df.to_csv(CONFIG['output_file'], index=False)
+        print(f"\nTransformation complete. Output written to {CONFIG['output_file']}")
+        print(f"Number of records processed: {len(output_df)}")
+        print(f"Columns in output: {list(output_df.columns)}")
+        
+    finally:
+        neo4j_handler.close()
+
 if __name__ == "__main__":
-    user_prompt = "hi"
-    response = query_llm(user_prompt)
-    print(response)
+    main()

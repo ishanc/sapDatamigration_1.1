@@ -69,6 +69,24 @@ SET t7.type = "char", t7.length = 3;
 MERGE (t8:TargetField {name: "banks"})
 SET t8.type = "char", t8.length = 3;
 
+MERGE (t8:TargetField {name: "land1"})
+SET t8.type = "char", t8.length = 3;
+
+MERGE (t9:TargetField {name: "klimk"})
+SET t9.type = "char", t9.length = 18;
+
+MERGE (t10:TargetField {name: "kdgrp"})
+SET t10.type = "char", t10.length = 2;
+
+MERGE (t11:TargetField {name: "vkorg"})
+SET t11.type = "char", t11.length = 4;
+
+MERGE (t12:TargetField {name: "vtweg"})
+SET t12.type = "char", t12.length = 2;
+
+MERGE (t13:TargetField {name: "spart"})
+SET t13.type = "char", t13.length = 2;
+
 MERGE (t9:TargetField {name: "ktokd"})
 SET t9.type = "char", t9.length = 4;
 
@@ -103,11 +121,113 @@ MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
 
 MATCH (s:SourceField {name: "state"})
 MATCH (t:TargetField {name: "regio"})
-MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "
+    CASE
+        WHEN UPPER(text) IN ['TX', 'TEXAS'] THEN 'TX'
+        WHEN UPPER(text) IN ['CA', 'CALIFORNIA'] THEN 'CA'
+        WHEN UPPER(text) IN ['NY', 'NEW YORK'] THEN 'NY'
+        ELSE UPPER(SUBSTRING(text, 0, 2))
+    END";
+
+// Update state mappings with transformation rules
+MATCH (s:SourceField {name: "state"})
+MATCH (t:TargetField {name: "regio"})
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "CASE 
+        WHEN toUpper(text) = 'TEXAS' THEN 'TX'
+        WHEN toUpper(text) = 'CALIFORNIA' THEN 'CA'
+        WHEN toUpper(text) = 'NEW YORK' THEN 'NY'
+        WHEN size(text) > 2 THEN substring(toUpper(text), 0, 2)
+        ELSE toUpper(text)
+    END";
+
+// Update state mappings with comprehensive US state codes
+MATCH (s:SourceField {name: "state"})
+MATCH (t:TargetField {name: "regio"})
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "CASE 
+        WHEN toUpper(text) IN ['ALABAMA', 'AL'] THEN 'AL'
+        WHEN toUpper(text) IN ['ALASKA', 'AK'] THEN 'AK'
+        WHEN toUpper(text) IN ['ARIZONA', 'AZ'] THEN 'AZ'
+        WHEN toUpper(text) IN ['ARKANSAS', 'AR'] THEN 'AR'
+        WHEN toUpper(text) IN ['CALIFORNIA', 'CA'] THEN 'CA'
+        WHEN toUpper(text) IN ['COLORADO', 'CO'] THEN 'CO'
+        WHEN toUpper(text) IN ['CONNECTICUT', 'CT'] THEN 'CT'
+        WHEN toUpper(text) IN ['DELAWARE', 'DE'] THEN 'DE'
+        WHEN toUpper(text) IN ['FLORIDA', 'FL'] THEN 'FL'
+        WHEN toUpper(text) IN ['GEORGIA', 'GA'] THEN 'GA'
+        WHEN toUpper(text) IN ['HAWAII', 'HI'] THEN 'HI'
+        WHEN toUpper(text) IN ['IDAHO', 'ID'] THEN 'ID'
+        WHEN toUpper(text) IN ['ILLINOIS', 'IL'] THEN 'IL'
+        WHEN toUpper(text) IN ['INDIANA', 'IN'] THEN 'IN'
+        WHEN toUpper(text) IN ['IOWA', 'IA'] THEN 'IA'
+        WHEN toUpper(text) IN ['KANSAS', 'KS'] THEN 'KS'
+        WHEN toUpper(text) IN ['KENTUCKY', 'KY'] THEN 'KY'
+        WHEN toUpper(text) IN ['LOUISIANA', 'LA'] THEN 'LA'
+        WHEN toUpper(text) IN ['MAINE', 'ME'] THEN 'ME'
+        WHEN toUpper(text) IN ['MARYLAND', 'MD'] THEN 'MD'
+        WHEN toUpper(text) IN ['MASSACHUSETTS', 'MA'] THEN 'MA'
+        WHEN toUpper(text) IN ['MICHIGAN', 'MI'] THEN 'MI'
+        WHEN toUpper(text) IN ['MINNESOTA', 'MN'] THEN 'MN'
+        WHEN toUpper(text) IN ['MISSISSIPPI', 'MS'] THEN 'MS'
+        WHEN toUpper(text) IN ['MISSOURI', 'MO'] THEN 'MO'
+        WHEN toUpper(text) IN ['MONTANA', 'MT'] THEN 'MT'
+        WHEN toUpper(text) IN ['NEBRASKA', 'NE'] THEN 'NE'
+        WHEN toUpper(text) IN ['NEVADA', 'NV'] THEN 'NV'
+        WHEN toUpper(text) IN ['NEW HAMPSHIRE', 'NH'] THEN 'NH'
+        WHEN toUpper(text) IN ['NEW JERSEY', 'NJ'] THEN 'NJ'
+        WHEN toUpper(text) IN ['NEW MEXICO', 'NM'] THEN 'NM'
+        WHEN toUpper(text) IN ['NEW YORK', 'NY'] THEN 'NY'
+        WHEN toUpper(text) IN ['NORTH CAROLINA', 'NC'] THEN 'NC'
+        WHEN toUpper(text) IN ['NORTH DAKOTA', 'ND'] THEN 'ND'
+        WHEN toUpper(text) IN ['OHIO', 'OH'] THEN 'OH'
+        WHEN toUpper(text) IN ['OKLAHOMA', 'OK'] THEN 'OK'
+        WHEN toUpper(text) IN ['OREGON', 'OR'] THEN 'OR'
+        WHEN toUpper(text) IN ['PENNSYLVANIA', 'PA'] THEN 'PA'
+        WHEN toUpper(text) IN ['RHODE ISLAND', 'RI'] THEN 'RI'
+        WHEN toUpper(text) IN ['SOUTH CAROLINA', 'SC'] THEN 'SC'
+        WHEN toUpper(text) IN ['SOUTH DAKOTA', 'SD'] THEN 'SD'
+        WHEN toUpper(text) IN ['TENNESSEE', 'TN'] THEN 'TN'
+        WHEN toUpper(text) IN ['TEXAS', 'TX'] THEN 'TX'
+        WHEN toUpper(text) IN ['UTAH', 'UT'] THEN 'UT'
+        WHEN toUpper(text) IN ['VERMONT', 'VT'] THEN 'VT'
+        WHEN toUpper(text) IN ['VIRGINIA', 'VA'] THEN 'VA'
+        WHEN toUpper(text) IN ['WASHINGTON', 'WA'] THEN 'WA'
+        WHEN toUpper(text) IN ['WEST VIRGINIA', 'WV'] THEN 'WV'
+        WHEN toUpper(text) IN ['WISCONSIN', 'WI'] THEN 'WI'
+        WHEN toUpper(text) IN ['WYOMING', 'WY'] THEN 'WY'
+        WHEN toUpper(text) IN ['DISTRICT OF COLUMBIA', 'DC'] THEN 'DC'
+        WHEN size(text) = 2 THEN toUpper(text)
+        ELSE 'XX'
+    END";
+
+// First delete any existing relationships for country to avoid duplicates
+MATCH (s:SourceField {name: "country"})-[r:MAPPED_TO]->()
+DELETE r;
+
+// Create correct country mapping to land1
+MATCH (s:SourceField {name: "country"})
+MATCH (t:TargetField {name: "land1"})
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "CASE 
+        WHEN toUpper(text) IN ['USA', 'US'] THEN 'USA'
+        ELSE toUpper(text)
+    END";
 
 MATCH (s:SourceField {name: "country"})
 MATCH (t:TargetField {name: "banks"})
-MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "
+    CASE
+        WHEN UPPER(text) IN ['USA', 'US'] THEN 'USA'
+        ELSE UPPER(text)
+    END";
 
 MATCH (s:SourceField {name: "type"})
 MATCH (t:TargetField {name: "ktokd"})
@@ -115,7 +235,25 @@ MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
 
 MATCH (s:SourceField {name: "taxid"})
 MATCH (t:TargetField {name: "stcd1"})
-MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "
+    CASE
+        WHEN NOT text CONTAINS '-' AND size(text) >= 7
+        THEN substring(text, 0, 2) + '-' + substring(text, 2)
+        ELSE text
+    END";
+
+// Update tax ID mappings with transformation rules
+MATCH (s:SourceField {name: "taxid"})
+MATCH (t:TargetField {name: "stcd1"})
+MERGE (s)-[r:MAPPED_TO]->(t)
+SET r.rule = "transform",
+    r.transform_query = "CASE 
+        WHEN NOT text CONTAINS '-' AND size(text) >= 7 
+        THEN substring(text, 0, 2) + '-' + substring(text, 2)
+        ELSE text
+    END";
 
 MATCH (s:SourceField {name: "division"})
 MATCH (t:TargetField {name: "txjcd"})
@@ -148,8 +286,16 @@ MATCH (s:SourceField {name: "credit_limit"})
 MATCH (t:TargetField {name: "bankn"})
 MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
 
+MATCH (s:SourceField {name: "credit_limit"})
+MATCH (t:TargetField {name: "klimk"})
+MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+
 MATCH (s:SourceField {name: "credit rating"})
 MATCH (t:TargetField {name: "bkont"})
+MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+
+MATCH (s:SourceField {name: "credit rating"})
+MATCH (t:TargetField {name: "kdgrp"})
 MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
 
 MATCH (s:SourceField {name: "pay_terms"})
@@ -170,4 +316,39 @@ SET r.rule = "transform",
         THEN 'T' + replace(text, ' ', '')
         ELSE text
     END";
+
+MATCH (s:SourceField {name: "sale org"})
+MATCH (t:TargetField {name: "vkorg"})
+MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+
+MATCH (s:SourceField {name: "channel"})
+MATCH (t:TargetField {name: "vtweg"})
+MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+
+MATCH (s:SourceField {name: "division"})
+MATCH (t:TargetField {name: "spart"})
+MERGE (s)-[:MAPPED_TO {rule: "direct"}]->(t);
+
+// Create output column order node
+MERGE (c:ColumnOrder {name: "default"})
+SET c.order = [
+    "kunnr",
+    "name1",
+    "name2",
+    "ort01",
+    "pstlz",
+    "stras",
+    "regio",
+    "land1",
+    "ktokd",
+    "stcd1",
+    "txjcd",
+    "sperr",
+    "zterm",
+    "klimk",
+    "kdgrp",
+    "vkorg",
+    "vtweg",
+    "spart"
+];
 
