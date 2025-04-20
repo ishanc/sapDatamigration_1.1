@@ -1,0 +1,7 @@
+﻿index,name,type,sale org,channel,division
+1001,walmart,retail,1000,10,10
+1002,costoco,retail,1000,10,10
+1003,kroger,retail,1000,10,10
+1004,target,retail,1000,10,10
+1005,amazon,online,2000,20,10
+1006,tyson,distributor,3000,30,10

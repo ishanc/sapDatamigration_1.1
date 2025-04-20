@@ -203,7 +203,7 @@ def process_dataframes(config):
 
     return result_df
 
-def main():
+def process_data():
     # Get source-target mappings
     mappings = get_source_target_mappings(CONFIG['mapping_file'])
     
@@ -249,13 +249,24 @@ def main():
             output_df = output_df[ordered_columns]
 
         # Save output
-        output_df.to_csv(CONFIG['output_file'], index=False)
-        print(f"\nTransformation complete. Output written to {CONFIG['output_file']}")
-        print(f"Number of records processed: {len(output_df)}")
-        print(f"Columns in output: {list(output_df.columns)}")
+        output_file = 'transformed_output.csv'
+        output_df.to_csv(output_file, index=False)
+        
+        return {
+            'status': 'success',
+            'message': f'Transformation complete. Output written to {output_file}',
+            'records': len(output_df),
+            'columns': list(output_df.columns),
+            'download_url': f'/download/{output_file}'
+        }
         
     finally:
         neo4j_handler.close()
 
 if __name__ == "__main__":
-    main()
+    result = process_data()
+    print("\nTransformation Results:")
+    print(f"Status: {result['status']}")
+    print(f"Message: {result['message']}")
+    print(f"Records processed: {result['records']}")
+    print(f"Columns in output: {result['columns']}")

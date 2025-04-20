@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAP Data Migration Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IERPA SAP Data Migration Tool</h1>
+            <p class="subtitle">Upload your CSV files to transform and migrate data</p>
+        </header>
+
+        <main>
+            <section class="upload-section" id="file-upload">
+                <div class="upload-area" id="drop-zone">
+                    <div class="upload-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                        </svg>
+                        <h2>Drag & Drop Files</h2>
+                        <p>or click to browse</p>
+                        <input type="file" id="file-input" multiple accept=".csv" class="file-input">
+                    </div>
+                </div>
+
+                <div class="file-list" id="file-list">
+                    <h3>Selected Files</h3>
+                    <ul id="selected-files"></ul>
+                </div>
+
+                <div class="button-group">
+                    <button id="upload-button" class="primary-button">
+                        Process Files
+                        <span class="button-icon">→</span>
+                    </button>
+                    <button id="reset-button" class="secondary-button reset-button">
+                        Reset
+                        <span class="button-icon">↺</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="progress-section" id="progress-section" style="display: none;">
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress" id="upload-progress"></div>
+                    </div>
+                    <p id="progress-status">Processing...</p>
+                </div>
+            </section>
+
+            <section class="result-section" id="result-section" style="display: none;">
+                <div class="result-container">
+                    <h3>Processing Results</h3>
+                    <div id="process-summary"></div>
+                    <div class="download-area">
+                        <button id="download-button" class="secondary-button">
+                            Download Results
+                            <span class="button-icon">↓</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Data Migration Tool © 2025</p>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast" style="display: none;"></div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
