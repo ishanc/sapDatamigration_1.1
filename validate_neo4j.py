@@ -1,19 +1,36 @@
 import os
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+from urllib.parse import urlparse
 
 def validate_neo4j_setup():
-    # Load environment variables
-    load_dotenv()
+    # Force reload environment variables
+    load_dotenv(find_dotenv(), override=True)
 
-    # Connect to Neo4j
+    # Get and validate Neo4j connection details from environment
+    uri = os.getenv("NEO4J_URI")
+    print(f"Loaded URI from env: {uri}")
+    
+    if not uri:
+        raise ValueError("NEO4J_URI environment variable is not set")
+
+    # Validate URI scheme
+    parsed_uri = urlparse(uri)
+    if parsed_uri.scheme not in ['bolt', 'neo4j', 'neo4j+s', 'neo4j+ssc']:
+        raise ValueError(f"Invalid Neo4j URI scheme: {parsed_uri.scheme}")
+
+    print(f"Using scheme: {parsed_uri.scheme}")
+    print(f"Using hostname: {parsed_uri.hostname}")
+    print(f"Using port: {parsed_uri.port}")
+
+    # Connect to Neo4j using environment variables
     driver = GraphDatabase.driver(
-        os.getenv("NEO4J_URI"),
+        uri.strip(),
         auth=(os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))
     )
 
     try:
-        with driver.session(database=os.getenv("NEO4J_DATABASE")) as session:
+        with driver.session() as session:
             # Check source fields
             result = session.run("""
                 MATCH (s:SourceField)

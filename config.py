@@ -2,9 +2,13 @@
 import os
 import csv
 
-def discover_csv_files(directory="originalFiles"):
+def discover_csv_files(directory="uploads"):
     """Dynamically discover CSV files and their configurations"""
     files_config = {}
+    
+    # Skip if directory doesn't exist yet
+    if not os.path.exists(directory):
+        return files_config
     
     for filename in os.listdir(directory):
         if filename.endswith('.csv'):
@@ -38,8 +42,8 @@ def get_merge_order(files_config):
 def load_config():
     """Load all configuration dynamically"""
     config = {
-        'files_config': discover_csv_files(),
-        'mapping_file': 'originalFiles/SourceTargetCustomerMasterRelationship.csv',
+        'files_config': discover_csv_files(),  # Now uses uploads directory by default
+        'mapping_file': os.path.join('originalFiles', 'SourceTargetCustomerMasterRelationship.csv'),
         'output_file': 'transformed_output.csv'
     }
     config['merge_order'] = get_merge_order(config['files_config'])
