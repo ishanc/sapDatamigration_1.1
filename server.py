@@ -1,7 +1,8 @@
 import os
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
-from app import process_data, CONFIG
+from app import process_data
+import config
 
 # Flask app configuration
 app = Flask(__name__)
@@ -36,14 +37,8 @@ def upload_files():
 
     if saved_files:
         try:
-            # Update CONFIG with new file paths
-            for filename in saved_files:
-                file_key = filename.lower().replace('.csv', '').replace(' ', '_')
-                CONFIG['files_config'][file_key] = {
-                    'path': os.path.join(app.config['UPLOAD_FOLDER'], filename),
-                    'key_field': 'customercode' if 'customercode' in filename else 'index',
-                    'headers': []  # Will be populated when processing
-                }
+            # Refresh the configuration to pick up new files
+            config.CONFIG.update(config.load_config())
             
             # Process the data
             result = process_data()

@@ -1,7 +1,0 @@
-﻿index,name,taxid, credit_limit ,credit rating,pay_terms,payment_term_description
-1009,walmart,13128762,100000,AAA,net 30,testing 1
-1010,costoco,12-128763,90000,AAA,net 90,testing 2
-1011,kroger,12-128764,60000,AA ,net 45,testing 3
-1012,target,12-128765,75000,AA,net 60,testing 4
-1013,amazon,12-128766,120000,AAA,net 120,testing 5
-1014,tyson,12-128767,150000,BBB,net 0,testing 6

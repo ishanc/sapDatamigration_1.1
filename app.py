@@ -1,24 +1,40 @@
 import os
 import csv
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import pandas as pd
 from config import CONFIG
+from urllib.parse import urlparse
 
-# Load environment variables
-load_dotenv()
+# Force reload environment variables
+load_dotenv(find_dotenv(), override=True)
 
+# Get and validate Neo4j connection details from environment
 NEO4J_URI = os.getenv("NEO4J_URI")
+if not NEO4J_URI:
+    raise ValueError("NEO4J_URI environment variable is not set")
+
+# Validate URI scheme
+parsed_uri = urlparse(NEO4J_URI)
+if parsed_uri.scheme not in ['bolt', 'neo4j', 'neo4j+s', 'neo4j+ssc']:
+    raise ValueError(f"Invalid Neo4j URI scheme: {parsed_uri.scheme}")
+
 NEO4J_USER = os.getenv("NEO4J_USER")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")  # Will be None if not in .env
 
 class Neo4jHandler:
     def __init__(self, uri, user, password):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.driver = GraphDatabase.driver(uri.strip(), auth=(user, password))
+        # Only use database from environment if explicitly set
+        self.database = os.getenv("NEO4J_DATABASE") if os.getenv("NEO4J_DATABASE") else None
 
     def close(self):
         self.driver.close()
+
+    def _get_session(self):
+        # Only pass database parameter if explicitly set
+        return self.driver.session(database=self.database) if self.database else self.driver.session()
 
     def fetch_transformation_rules(self):
         query = """
@@ -26,7 +42,7 @@ class Neo4jHandler:
         RETURN s.name AS source_field, t.name AS target_field, r.rule AS mapping_rule, 
                r.transform_query AS transform_query, t.type AS target_type
         """
-        with self.driver.session(database=NEO4J_DATABASE) as session:
+        with self._get_session() as session:
             result = session.run(query)
             return [record for record in result]
 
@@ -35,7 +51,7 @@ class Neo4jHandler:
         MATCH (cs:ColumnStandardization {name: 'field_standardization'})
         RETURN cs.rules as rules
         """
-        with self.driver.session(database=NEO4J_DATABASE) as session:
+        with self._get_session() as session:
             result = session.run(query)
             record = result.single()
             if record and record["rules"]:
@@ -53,7 +69,7 @@ class Neo4jHandler:
             WITH $value AS text
             RETURN {transform_query} AS result
             """
-            with self.driver.session(database=NEO4J_DATABASE) as session:
+            with self._get_session() as session:
                 try:
                     result = session.run(query, value=value)
                     record = result.single()
@@ -68,7 +84,7 @@ class Neo4jHandler:
         MATCH (c:ColumnOrder {name: "default"})
         RETURN c.order AS column_order
         """
-        with self.driver.session(database=NEO4J_DATABASE) as session:
+        with self._get_session() as session:
             result = session.run(query)
             record = result.single()
             return record["column_order"] if record else []
@@ -98,8 +114,12 @@ def process_dataframes(config):
         # Get standardization rules from Neo4j
         standardization_rules = neo4j_handler.fetch_column_standardization_rules()
         
-        # Load each dataframe
+        # Load each dataframe only if file exists
         for key, file_config in config['files_config'].items():
+            if not os.path.exists(file_config['path']):
+                print(f"Warning: File {file_config['path']} does not exist, skipping")
+                continue
+                
             df = pd.read_csv(file_config['path'])
             
             # Clean column names - strip whitespace
@@ -112,11 +132,9 @@ def process_dataframes(config):
             # Apply other standardization rules
             for rule in standardization_rules:
                 if rule['source_field'] in df.columns and rule['source_field'] != 'index':
-                    # Check if condition exists and is satisfied
                     if rule['condition'] is None:
                         df = df.rename(columns={rule['source_field']: rule['target_field']})
                     else:
-                        # Create a safe evaluation context
                         eval_context = {'key_field': file_config['key_field']}
                         try:
                             if eval(rule['condition'], {"__builtins__": {}}, eval_context):
@@ -139,12 +157,29 @@ def process_dataframes(config):
         result_df = dataframes[base_files[0]]
         for key in base_files[1:]:
             if key in dataframes:
+                # For each file, handle duplicate columns before merging
+                df_to_merge = dataframes[key]
+                duplicate_cols = set(result_df.columns) & set(df_to_merge.columns) - {'customercode'}
+                
+                # For duplicate columns, keep the non-null values from both dataframes
+                for col in duplicate_cols:
+                    temp_col = f"{col}_temp"
+                    df_to_merge = df_to_merge.rename(columns={col: temp_col})
+                
+                # Merge with temporary column names
                 result_df = pd.merge(
                     result_df,
-                    dataframes[key],
+                    df_to_merge,
                     on='customercode',
                     how='outer'
                 )
+                
+                # Combine values for duplicate columns
+                for col in duplicate_cols:
+                    temp_col = f"{col}_temp"
+                    if temp_col in result_df.columns:
+                        result_df[col] = result_df[col].fillna(result_df[temp_col])
+                        result_df = result_df.drop(columns=[temp_col])
     else:
         result_df = pd.DataFrame()
 
@@ -154,50 +189,65 @@ def process_dataframes(config):
         # Start with empty finance dataframe
         finance_df = pd.DataFrame()
         
-        # Process each finance file in order (copy file last)
+        # Process each finance file in order
         for file_key in finance_files:
             df = dataframes[file_key]
             if finance_df.empty:
                 finance_df = df
             else:
-                # For each customer in the new file
-                for idx, row in df.iterrows():
-                    cust_code = row['customercode']
-                    # Update existing or append new
-                    if cust_code in finance_df['customercode'].values:
-                        mask = finance_df['customercode'] == cust_code
-                        # Update non-null values
-                        for col in df.columns:
-                            if col != 'customercode' and pd.notna(row[col]):
-                                finance_df.loc[mask, col] = row[col]
-                    else:
-                        finance_df = pd.concat([finance_df, pd.DataFrame([row])], ignore_index=True)
+                # Handle duplicate columns before merging
+                duplicate_cols = set(finance_df.columns) & set(df.columns) - {'customercode'}
+                
+                # For duplicate columns, keep the non-null values from both dataframes
+                for col in duplicate_cols:
+                    temp_col = f"{col}_temp"
+                    df = df.rename(columns={col: temp_col})
+                
+                # Merge with temporary column names
+                finance_df = pd.merge(
+                    finance_df,
+                    df,
+                    on='customercode',
+                    how='outer'
+                )
+                
+                # Combine values for duplicate columns
+                for col in duplicate_cols:
+                    temp_col = f"{col}_temp"
+                    if temp_col in finance_df.columns:
+                        finance_df[col] = finance_df[col].fillna(finance_df[temp_col])
+                        finance_df = finance_df.drop(columns=[temp_col])
 
         # Merge finance data with base data
         if not result_df.empty:
+            # Handle duplicate columns before final merge
+            duplicate_cols = set(result_df.columns) & set(finance_df.columns) - {'customercode'}
+            
+            # For duplicate columns, keep the non-null values from both dataframes
+            for col in duplicate_cols:
+                temp_col = f"{col}_temp"
+                finance_df = finance_df.rename(columns={col: temp_col})
+            
+            # Merge with temporary column names
             result_df = pd.merge(
                 result_df,
                 finance_df,
                 on='customercode',
-                how='outer',
-                suffixes=('', '_finance')
+                how='outer'
             )
             
-            # Clean up duplicate columns while preserving all values
-            for col in result_df.columns:
-                if col.endswith('_finance'):
-                    base_col = col.replace('_finance', '')
-                    if base_col in result_df.columns:
+            # Combine values for duplicate columns, preferring finance data for certain fields
+            for col in duplicate_cols:
+                temp_col = f"{col}_temp"
+                if temp_col in result_df.columns:
+                    if col == 'payment terms':
                         # For payment terms, prefer finance values
-                        if base_col == 'payment terms':
-                            mask = result_df[col].notna()
-                            result_df.loc[mask, base_col] = result_df.loc[mask, col]
-                        else:
-                            # For other columns, only fill nulls
-                            result_df[base_col] = result_df[base_col].fillna(result_df[col])
+                        mask = result_df[temp_col].notna()
+                        result_df.loc[mask, col] = result_df.loc[mask, temp_col]
                     else:
-                        result_df[base_col] = result_df[col]
-                    result_df = result_df.drop(columns=[col])
+                        # For other columns, only fill nulls
+                        result_df[col] = result_df[col].fillna(result_df[temp_col])
+                    result_df = result_df.drop(columns=[temp_col])
         else:
             result_df = finance_df
 
@@ -229,24 +279,51 @@ def process_data():
                 
                 if source_field in field_mappings:
                     rule = field_mappings[source_field]
+                    
+                    # Special handling for payment terms to ensure proper string conversion
+                    if target_field == 'zterm':
+                        # Convert to string and clean up numeric values
+                        merged_df[source_field] = merged_df[source_field].fillna('')
+                        merged_df[source_field] = merged_df[source_field].astype(str)
+                        # Remove .0 from float strings
+                        merged_df[source_field] = merged_df[source_field].replace(r'\.0$', '', regex=True)
+                        
+                    # Convert numeric types to string before transformation
+                    elif merged_df[source_field].dtype in ['int64', 'float64']:
+                        merged_df[source_field] = merged_df[source_field].fillna('')
+                        merged_df[source_field] = merged_df[source_field].astype(str)
+                        # Remove .0 from float strings for other numeric fields
+                        merged_df[source_field] = merged_df[source_field].replace(r'\.0$', '', regex=True)
+                    else:
+                        # For non-numeric fields, just fill NaN with empty string
+                        merged_df[source_field] = merged_df[source_field].fillna('')
+                    
                     if rule['mapping_rule'] == 'direct':
-                        output_df[target_field] = merged_df[source_field].fillna('')
+                        output_df[target_field] = merged_df[source_field]
                     elif rule['mapping_rule'] == 'transform':
+                        # Apply transformation to non-empty values
                         output_df[target_field] = merged_df[source_field].apply(
                             lambda x: neo4j_handler.apply_transformation(
-                                x, 
+                                str(x), 
                                 rule['mapping_rule'], 
                                 rule.get('transform_query')
-                            ) if pd.notna(x) else ''
+                            ) if x != '' else ''
                         )
                 else:
                     output_df[target_field] = merged_df[source_field].fillna('')
+
+        # Final cleanup of any remaining NaN values
+        output_df = output_df.fillna('')
 
         # Get and apply column order
         column_order = neo4j_handler.fetch_column_order()
         if column_order:
             ordered_columns = [col for col in column_order if col in output_df.columns]
             output_df = output_df[ordered_columns]
+
+        # Final cleanup of any remaining .0 in payment terms
+        if 'zterm' in output_df.columns:
+            output_df['zterm'] = output_df['zterm'].replace(r'\.0$', '', regex=True)
 
         # Save output
         output_file = 'transformed_output.csv'

@@ -1,5 +1,5 @@
 ﻿index,name,taxid, credit_limit ,credit rating,pay_terms
-1001,walmart,13128762,100000,AAA,net 30
+1001,walmart,12-128762,100000,AAA,net 30
 1002,costoco,12-128763,90000,AAA,net 90
 1003,kroger,12-128764,60000,AA ,net 45
 1004,target,12-128765,75000,AA,net 60
