@@ -20,6 +20,11 @@ def allowed_file(filename):
 def index():
     return render_template('ui.html')
 
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
+
 @app.route('/upload', methods=['POST'])
 def upload_files():
     if 'files[]' not in request.files:
