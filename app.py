@@ -16,7 +16,7 @@ if not NEO4J_URI:
 
 # Validate URI scheme
 parsed_uri = urlparse(NEO4J_URI)
-if parsed_uri.scheme not in ['bolt', 'neo4j', 'neo4j+s', 'neo4j+ssc']:
+if (parsed_uri.scheme not in ['bolt', 'neo4j', 'neo4j+s', 'neo4j+ssc']):
     raise ValueError(f"Invalid Neo4j URI scheme: {parsed_uri.scheme}")
 
 NEO4J_USER = os.getenv("NEO4J_USER")
@@ -317,7 +317,7 @@ def process_data():
 
         # Get and apply column order
         column_order = neo4j_handler.fetch_column_order()
-        if column_order:
+        if (column_order):
             ordered_columns = [col for col in column_order if col in output_df.columns]
             output_df = output_df[ordered_columns]
 
@@ -339,6 +339,99 @@ def process_data():
         
     finally:
         neo4j_handler.close()
+
+def add_state_transformation(uri, user, password):
+    cypher = '''
+    MATCH (s:SourceField {name: "state"})
+    MATCH (t:TargetField {name: "regio"})
+    MERGE (s)-[r:MAPPED_TO]->(t)
+    SET r.rule = "transform",
+        r.transform_query = "CASE \
+            WHEN toUpper(text) IN ['ALABAMA', 'AL'] THEN 'AL' \
+            WHEN toUpper(text) IN ['ALASKA', 'AK'] THEN 'AK' \
+            WHEN toUpper(text) IN ['ARIZONA', 'AZ'] THEN 'AZ' \
+            WHEN toUpper(text) IN ['ARKANSAS', 'AR'] THEN 'AR' \
+            WHEN toUpper(text) IN ['CALIFORNIA', 'CA'] THEN 'CA' \
+            WHEN toUpper(text) IN ['COLORADO', 'CO'] THEN 'CO' \
+            WHEN toUpper(text) IN ['CONNECTICUT', 'CT'] THEN 'CT' \
+            WHEN toUpper(text) IN ['DELAWARE', 'DE'] THEN 'DE' \
+            WHEN toUpper(text) IN ['FLORIDA', 'FL'] THEN 'FL' \
+            WHEN toUpper(text) IN ['GEORGIA', 'GA'] THEN 'GA' \
+            WHEN toUpper(text) IN ['HAWAII', 'HI'] THEN 'HI' \
+            WHEN toUpper(text) IN ['IDAHO', 'ID'] THEN 'ID' \
+            WHEN toUpper(text) IN ['ILLINOIS', 'IL'] THEN 'IL' \
+            WHEN toUpper(text) IN ['INDIANA', 'IN'] THEN 'IN' \
+            WHEN toUpper(text) IN ['IOWA', 'IA'] THEN 'IA' \
+            WHEN toUpper(text) IN ['KANSAS', 'KS'] THEN 'KS' \
+            WHEN toUpper(text) IN ['KENTUCKY', 'KY'] THEN 'KY' \
+            WHEN toUpper(text) IN ['LOUISIANA', 'LA'] THEN 'LA' \
+            WHEN toUpper(text) IN ['MAINE', 'ME'] THEN 'ME' \
+            WHEN toUpper(text) IN ['MARYLAND', 'MD'] THEN 'MD' \
+            WHEN toUpper(text) IN ['MASSACHUSETTS', 'MA'] THEN 'MA' \
+            WHEN toUpper(text) IN ['MICHIGAN', 'MI'] THEN 'MI' \
+            WHEN toUpper(text) IN ['MINNESOTA', 'MN'] THEN 'MN' \
+            WHEN toUpper(text) IN ['MISSISSIPPI', 'MS'] THEN 'MS' \
+            WHEN toUpper(text) IN ['MISSOURI', 'MO'] THEN 'MO' \
+            WHEN toUpper(text) IN ['MONTANA', 'MT'] THEN 'MT' \
+            WHEN toUpper(text) IN ['NEBRASKA', 'NE'] THEN 'NE' \
+            WHEN toUpper(text) IN ['NEVADA', 'NV'] THEN 'NV' \
+            WHEN toUpper(text) IN ['NEW HAMPSHIRE', 'NH'] THEN 'NH' \
+            WHEN toUpper(text) IN ['NEW JERSEY', 'NJ'] THEN 'NJ' \
+            WHEN toUpper(text) IN ['NEW MEXICO', 'NM'] THEN 'NM' \
+            WHEN toUpper(text) IN ['NEW YORK', 'NY'] THEN 'NY' \
+            WHEN toUpper(text) IN ['NORTH CAROLINA', 'NC'] THEN 'NC' \
+            WHEN toUpper(text) IN ['NORTH DAKOTA', 'ND'] THEN 'ND' \
+            WHEN toUpper(text) IN ['OHIO', 'OH'] THEN 'OH' \
+            WHEN toUpper(text) IN ['OKLAHOMA', 'OK'] THEN 'OK' \
+            WHEN toUpper(text) IN ['OREGON', 'OR'] THEN 'OR' \
+            WHEN toUpper(text) IN ['PENNSYLVANIA', 'PA'] THEN 'PA' \
+            WHEN toUpper(text) IN ['RHODE ISLAND', 'RI'] THEN 'RI' \
+            WHEN toUpper(text) IN ['SOUTH CAROLINA', 'SC'] THEN 'SC' \
+            WHEN toUpper(text) IN ['SOUTH DAKOTA', 'SD'] THEN 'SD' \
+            WHEN toUpper(text) IN ['TENNESSEE', 'TN'] THEN 'TN' \
+            WHEN toUpper(text) IN ['TEXAS', 'TX'] THEN 'TX' \
+            WHEN toUpper(text) IN ['UTAH', 'UT'] THEN 'UT' \
+            WHEN toUpper(text) IN ['VERMONT', 'VT'] THEN 'VT' \
+            WHEN toUpper(text) IN ['VIRGINIA', 'VA'] THEN 'VA' \
+            WHEN toUpper(text) IN ['WASHINGTON', 'WA'] THEN 'WA' \
+            WHEN toUpper(text) IN ['WEST VIRGINIA', 'WV'] THEN 'WV' \
+            WHEN toUpper(text) IN ['WISCONSIN', 'WI'] THEN 'WI' \
+            WHEN toUpper(text) IN ['WYOMING', 'WY'] THEN 'WY' \
+            WHEN toUpper(text) IN ['DISTRICT OF COLUMBIA', 'DC'] THEN 'DC' \
+            WHEN text IS NULL OR text = '' THEN '' \
+            WHEN size(text) = 2 THEN toUpper(text) \
+            ELSE 'XX' \
+        END"
+    '''
+    with GraphDatabase.driver(uri, auth=(user, password)) as driver:
+        with driver.session() as session:
+            session.run(cypher)
+            return True
+
+def delete_state_transformation(uri, user, password):
+    with GraphDatabase.driver(uri, auth=(user, password)) as driver:
+        with driver.session() as session:
+            # First operation: Delete the existing relationship
+            delete_query = "MATCH (:SourceField {name: 'state'})-[r:MAPPED_TO]->(:TargetField {name: 'regio'}) DELETE r"
+            session.run(delete_query)
+            
+            # Second operation: Create new direct mapping
+            create_query = "MATCH (s:SourceField {name: 'state'}), (t:TargetField {name: 'regio'}) CREATE (s)-[:MAPPED_TO {rule: 'direct'}]->(t)"
+            session.run(create_query)
+            
+            return True
+
+def state_rule_status(uri, user, password):
+    cypher = '''
+    MATCH (s:SourceField {name: "state"})-[r:MAPPED_TO]->(t:TargetField {name: "regio"})
+    WHERE r.rule = "transform"
+    RETURN COUNT(r) AS rule_count
+    '''
+    with GraphDatabase.driver(uri, auth=(user, password)) as driver:
+        with driver.session() as session:
+            result = session.run(cypher)
+            count = result.single()["rule_count"]
+            return count > 0
 
 if __name__ == "__main__":
     result = process_data()

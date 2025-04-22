@@ -12,8 +12,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const toast = document.getElementById('toast');
     const resetButton = document.getElementById('reset-button');
 
+    // === State Transformation Toggle ===
+    console.group('Toggle Initialization');
+    console.log('Starting toggle initialization...');
+    
+    const toggleCheckbox = document.querySelector('#toggle-state-rule');
+    const toggleStatus = document.querySelector('#toggle-status');
+    
+    console.log('Toggle elements:', {
+        toggleCheckbox: toggleCheckbox,
+        toggleStatus: toggleStatus,
+        toggleCheckboxExists: !!toggleCheckbox,
+        toggleStatusExists: !!toggleStatus
+    });
+
+    if (!toggleCheckbox || !toggleStatus) {
+        console.error('Toggle elements not found. DOM structure might be incorrect.');
+        console.groupEnd();
+        return;
+    }
+
     let selectedFiles = [];
 
+    // === File Upload Handlers ===
     // Drag and drop handlers
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -64,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateFileList();
     };
 
+    // === File Processing ===
     uploadButton.addEventListener('click', async () => {
         if (!selectedFiles.length) return;
 
@@ -154,33 +176,98 @@ document.addEventListener('DOMContentLoaded', () => {
     
     resetButton.addEventListener('click', resetForm);
 
-    // Chat Interface Logic
-    const sendButton = document.getElementById("send-button");
-    const userMessage = document.getElementById("user-message");
-    const chatHistory = document.getElementById("chat-history");
-
-    sendButton.addEventListener("click", () => {
-        const message = userMessage.value.trim();
-        if (message === "") {
-            return;
+    // === State Transformation Functions ===
+    async function checkStateRule() {
+        console.group('checkStateRule');
+        console.log('Starting state rule check...');
+        toggleCheckbox.disabled = true;
+        toggleStatus.textContent = 'Checking...';
+        
+        try {
+            console.log('Sending request to check state rule status...');
+            const response = await fetch('/state_rule_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            
+            console.log('Response received:', response);
+            const data = await response.json();
+            console.log('State rule status data:', data);
+            
+            if (data.success) {
+                toggleCheckbox.checked = data.active;
+                toggleStatus.textContent = data.active ? 'Rule is ON' : 'Rule is OFF';
+                console.log('Successfully updated toggle state:', {
+                    checked: toggleCheckbox.checked,
+                    status: toggleStatus.textContent
+                });
+            } else {
+                console.error('Error in response:', data.error);
+                toggleStatus.textContent = 'Error checking rule';
+                showToast(data.error || 'Failed to check rule status', 'error');
+            }
+        } catch (e) {
+            console.error('Error checking state rule:', e);
+            toggleStatus.textContent = 'Error checking rule';
+            showToast('Network or server error', 'error');
+        } finally {
+            toggleCheckbox.disabled = false;
+            console.groupEnd();
         }
+    }
 
-        // Add user message to chat history
-        const userMessageElement = document.createElement("div");
-        userMessageElement.textContent = `You: ${message}`;
-        chatHistory.appendChild(userMessageElement);
+    async function toggleStateRule(e) {
+        console.group('toggleStateRule');
+        console.log('Toggle state change event:', e);
+        console.log('Current checkbox state:', e.target.checked);
+        
+        const action = e.target.checked ? 'add' : 'delete';
+        console.log('Action to perform:', action);
+        
+        toggleCheckbox.disabled = true;
+        toggleStatus.textContent = 'Processing...';
+        
+        try {
+            console.log('Sending toggle request...');
+            const response = await fetch('/toggle_state_transformation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            
+            console.log('Toggle response received:', response);
+            const data = await response.json();
+            console.log('Toggle response data:', data);
+            
+            if (data.success) {
+                toggleStatus.textContent = e.target.checked ? 'Rule is ON' : 'Rule is OFF';
+                showToast(data.message, 'success');
+                console.log('Successfully toggled state');
+            } else {
+                console.error('Error in toggle response:', data.error);
+                e.target.checked = !e.target.checked; // Revert the toggle
+                toggleStatus.textContent = e.target.checked ? 'Rule is ON' : 'Rule is OFF';
+                showToast(data.error || 'Failed to toggle rule', 'error');
+            }
+        } catch (e) {
+            console.error('Error during toggle:', e);
+            e.target.checked = !e.target.checked; // Revert the toggle
+            toggleStatus.textContent = 'Error';
+            showToast('Network or server error', 'error');
+        } finally {
+            toggleCheckbox.disabled = false;
+            console.groupEnd();
+        }
+    }
 
-        // Simulate LLM response
-        const botMessageElement = document.createElement("div");
-        botMessageElement.textContent = "Bot: Processing your request...";
-        chatHistory.appendChild(botMessageElement);
-
-        // Clear input field
-        userMessage.value = "";
-
-        // Simulate delay for bot response
-        setTimeout(() => {
-            botMessageElement.textContent = "Bot: Here is the response to your query.";
-        }, 2000);
-    });
+    // Initialize toggle functionality
+    console.log('Adding event listener to toggle...');
+    toggleCheckbox.addEventListener('change', toggleStateRule);
+    
+    // Initial check of rule status
+    console.log('Performing initial state check...');
+    checkStateRule();
+    
+    console.groupEnd();
 });
